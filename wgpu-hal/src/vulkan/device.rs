@@ -901,6 +901,23 @@ impl crate::Device for super::Device {
 
         let needs_host_access = is_cpu_read || is_cpu_write;
 
+        let mut memory_type_bits = requirements.memory_type_bits & self.valid_ash_memory_types;
+
+        // For `CpuToGpu`, gpu-allocator prefers DEVICE_LOCAL | HOST_VISIBLE.
+        // With resizable BAR that is VRAM, so CPU writes to a staging buffer
+        // cross PCIe just for the GPU to copy the data once. Keep staging
+        // buffers (MAP_WRITE | COPY_SRC, e.g. `Queue::write_buffer`) in
+        // HOST_VISIBLE system memory when the device has any.
+        let is_upload_staging = is_cpu_write
+            && !is_cpu_read
+            && (desc.usage - wgt::BufferUses::MAP_WRITE - wgt::BufferUses::COPY_SRC).is_empty();
+        if is_upload_staging {
+            let staging_bits = memory_type_bits & self.host_staging_memory_types;
+            if staging_bits != 0 {
+                memory_type_bits = staging_bits;
+            }
+        }
+
         self.error_if_would_oom_on_resource_allocation(needs_host_access, requirements.size)
             .inspect_err(|_| {
                 unsafe { self.shared.raw.destroy_buffer(raw, None) };
@@ -924,7 +941,7 @@ impl crate::Device for super::Device {
             .allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
                 name,
                 requirements: vk::MemoryRequirements {
-                    memory_type_bits: requirements.memory_type_bits & self.valid_ash_memory_types,
+                    memory_type_bits,
                     ..requirements
                 },
                 location,

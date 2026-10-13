@@ -522,6 +522,9 @@ pub struct Device {
     desc_allocator:
         Mutex<gpu_descriptor::DescriptorAllocator<vk::DescriptorPool, vk::DescriptorSet>>,
     valid_ash_memory_types: u32,
+    /// Subset of `valid_ash_memory_types` that is HOST_VISIBLE | HOST_COHERENT
+    /// without DEVICE_LOCAL (system memory). Used for upload staging buffers.
+    host_staging_memory_types: u32,
     naga_options: naga::back::spv::Options<'static>,
     #[cfg(feature = "renderdoc")]
     render_doc: crate::auxil::renderdoc::RenderDoc,

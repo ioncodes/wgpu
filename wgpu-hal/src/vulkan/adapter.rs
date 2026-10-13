@@ -2441,6 +2441,25 @@ impl super::Adapter {
                 u
             }
         });
+        // Memory types for upload staging: HOST_VISIBLE | HOST_COHERENT
+        // without DEVICE_LOCAL, i.e. system memory. Empty on UMA, where
+        // every type is DEVICE_LOCAL.
+        let host_staging_memory_types =
+            memory_types
+                .iter()
+                .enumerate()
+                .fold(valid_ash_memory_types, |u, (i, mem)| {
+                    let flags = mem.property_flags;
+                    if flags.contains(
+                        vk::MemoryPropertyFlags::HOST_VISIBLE
+                            | vk::MemoryPropertyFlags::HOST_COHERENT,
+                    ) && !flags.contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                    {
+                        u
+                    } else {
+                        u & !(1 << i)
+                    }
+                });
 
         // Note that VK_EXT_debug_utils is an instance extension (enabled at the instance
         // level) but contains a few functions that can be loaded directly on the Device for a
@@ -2792,6 +2811,7 @@ impl super::Adapter {
             mem_allocator: Mutex::new(mem_allocator),
             desc_allocator: Mutex::new(desc_allocator),
             valid_ash_memory_types,
+            host_staging_memory_types,
             naga_options,
             #[cfg(feature = "renderdoc")]
             render_doc: Default::default(),
